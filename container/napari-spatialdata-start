@@ -1,0 +1,104 @@
+#!/opt/napari-env/bin/python
+"""Start napari for a streamed napari-spatialdata session.
+
+    napari-spatialdata-start [STORE.zarr ...]
+
+Opens the given SpatialData stores in the same way as
+``python -m napari_spatialdata view``, or an empty viewer when none are given
+(stores are then opened from File > Open Folder...).
+
+Whenever the napari-spatialdata widgets are docked, they are rearranged so
+that the window fits a laptop-height browser window. As docked by the plugin,
+the left column (layer controls, layer list, SpatialData, slider, colorbar)
+cannot be shorter than about 910 pixels, which cuts off the bottom of napari
+in most browser windows. The arrangement used here:
+
+    left:   layer controls | layer list | [slider, colorbar] as tabs
+    right:  [View, SpatialData] as tabs, View in front
+
+brings the minimum height to about 680 pixels. Every widget remains in the
+Window menu and can be undocked or moved as usual.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import napari
+from qtpy.QtCore import Qt, QTimer
+from qtpy.QtWidgets import QDockWidget, QMainWindow
+
+SDATA_DOCK = "SpatialData"
+VIEW_DOCK = "View (napari-spatialdata)"
+ACCESSORY_DOCKS = ("slider", "colorbar")
+
+
+def _docks(window: QMainWindow) -> dict[str, QDockWidget]:
+    return {d.windowTitle(): d for d in window.findChildren(QDockWidget)}
+
+
+def arrange(window: QMainWindow) -> bool:
+    """Rearrange the plugin's docks once they exist. Returns True when done."""
+    docks = _docks(window)
+    sdata, view = docks.get(SDATA_DOCK), docks.get(VIEW_DOCK)
+    if sdata is None or view is None:
+        return False
+
+    right = Qt.DockWidgetArea.RightDockWidgetArea
+    if window.dockWidgetArea(sdata) != right:
+        window.removeDockWidget(sdata)
+        window.addDockWidget(right, sdata)
+        sdata.show()
+    window.tabifyDockWidget(view, sdata)
+
+    accessories = [docks[name] for name in ACCESSORY_DOCKS if name in docks]
+    for first, other in zip(accessories, accessories[1:]):
+        window.tabifyDockWidget(first, other)
+    if accessories:
+        accessories[0].raise_()
+
+    # SpatialData in front first, so that elements can be chosen straight away.
+    sdata.raise_()
+    return True
+
+
+def main(argv: list[str]) -> int:
+    stores = [Path(p).resolve() for p in argv]
+    missing = [str(p) for p in stores if not p.is_dir()]
+    if missing:
+        print(f"napari-spatialdata-start: not a directory: {', '.join(missing)}; "
+              "starting an empty viewer", file=sys.stderr)
+        stores = [p for p in stores if p.is_dir()]
+
+    viewer = napari.Viewer()
+    window = viewer.window._qt_window
+
+    if stores:
+        import spatialdata as sd
+        from napari_spatialdata import Interactive
+
+        Interactive([sd.read_zarr(p) for p in stores], headless=True)
+
+    # Arrange whenever the plugin's widgets (re)appear, for example after a
+    # store is opened from the File menu. The check is cheap and runs once a
+    # second; an arrangement is applied once per set of docks.
+    arranged: set[int] = set()
+
+    def check() -> None:
+        docks = _docks(window)
+        key = id(docks.get(SDATA_DOCK))
+        if docks.get(SDATA_DOCK) is not None and key not in arranged and arrange(window):
+            arranged.add(key)
+
+    timer = QTimer(window)
+    timer.timeout.connect(check)
+    timer.start(1000)
+    check()
+
+    napari.run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

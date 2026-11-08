@@ -1,0 +1,20 @@
+# Separate environment for Bruker's napari-cosmx plugin (/opt/napari-cosmx-env).
+#
+# napari-cosmx cannot share the main environment: it requires numpy<2,
+# zarr<3 and distributed<2024.9, while napari-spatialdata and spatialdata
+# need numpy 2 and zarr 3. Its change log lists support up to napari 0.6.6,
+# which is used here with PyQt5.
+#
+# The plugin is not on PyPI. The wheel is downloaded from Bruker's
+# CosMx-Analysis-Scratch-Space repository and checked against the SHA-256
+# below. It is licensed under Bruker's Software License Agreement for
+# Non-Commercial Use (internal, non-commercial use only; see README).
+#
+# Regenerate requirements-cosmx.lock with ./compile-lock.sh after changes.
+napari[all]==0.6.6
+napari-cosmx @ https://raw.githubusercontent.com/Nanostring-Biostats/CosMx-Analysis-Scratch-Space/Main/assets/napari-cosmx%20releases/napari_CosMx-0.5.0.0-py3-none-any.whl#sha256=2d5fc4028ca46662a41d5b447b4f654df2442bfca35e4dde0bf26c69cdf6b911
+
+# pyarrow 26 requires NumPy 2 at import time but does not declare it, so the
+# resolver cannot see the conflict with napari-cosmx's numpy<2. 25.0.1 is the
+# newest release that works with NumPy 1.26 (checked November 2026).
+pyarrow<26

@@ -1,0 +1,12 @@
+--- a/PyComplexHeatmap/utils.py	2026-11-09 12:02:03.343747347 +0000
++++ b/PyComplexHeatmap/utils.py	2026-11-09 12:02:03.372129192 +0000
+@@ -128,7 +128,8 @@
+ 		else:
+ 			cmap = "exp1"
+ 	if isinstance(cmap, str):
+-		cmap1 = matplotlib.cm.get_cmap(cmap).copy()
++		# matplotlib.cm.get_cmap was removed in matplotlib 3.9
++		cmap1 = matplotlib.colormaps[cmap].copy()
+ 	elif isinstance(cmap, list):
+ 		cmap1 = matplotlib.colors.ListedColormap(cmap)
+ 	else:

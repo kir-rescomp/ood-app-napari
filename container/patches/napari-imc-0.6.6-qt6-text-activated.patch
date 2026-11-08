@@ -1,0 +1,20 @@
+--- a/napari_imc/widgets/channel_controls_widget.py	2026-11-09 12:02:03.390399789 +0000
++++ b/napari_imc/widgets/channel_controls_widget.py	2026-11-09 12:02:03.417950378 +0000
+@@ -100,14 +100,15 @@
+                     color.alpha() / 255,
+                 )
+ 
+-        blending_combo_box_activated = self._blending_combo_box.activated[str]
++        # activated[str] exists only in Qt 5; textActivated is its Qt 5.14+ and Qt 6 equivalent
++        blending_combo_box_activated = self._blending_combo_box.textActivated
+ 
+         @blending_combo_box_activated.connect
+         def on_blending_combo_box_activated(text: str):
+             for channel in self._controller.selected_channels:
+                 channel.blending = text
+ 
+-        interpolation_combo_box_activated = self._interpolation_combo_box.activated[str]
++        interpolation_combo_box_activated = self._interpolation_combo_box.textActivated
+ 
+         @interpolation_combo_box_activated.connect
+         def on_interpolation_combo_box_activated(text: str):
