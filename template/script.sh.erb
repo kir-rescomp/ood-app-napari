@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Starts the napari-spatialdata container on the port chosen in before.sh.
+# Inside the container, selkies-session starts an Xvfb display, the napari
+# launcher (Openbox + napari) and the Selkies stream server.
+#
+# Selkies listens on every interface so that the portal's reverse proxy can
+# reach it, and runs in secure mode: no connection is admitted without the
+# session token provisioned by after.sh.
+<%- require 'shellwords' -%>
+
+# ---- SITE settings ---------------------------------------------------------
+NAPARI_SIF="/gpfs3/well/kir-scratch/sansom/mat611/Github/ood-app-napari/container/napari-spatialdata-selkies_<%= context.napari_spatialdata_version %>.sif"   # SITE
+BIND_PATHS="/well"                      # SITE: add the target if /well is a symlink
+# module load Apptainer                 # SITE, if not on PATH
+# -----------------------------------------------------------------------------
+
+session_dir="${PWD}"
+dataset=<%= context.dataset.to_s.strip.shellescape %>
+<%- viewer_choice = context.napari_app.to_s == 'cosmx' ? 'cosmx' : 'spatialdata' -%>
+napari_app="<%= viewer_choice %>"
+
+# Cores: llvmpipe renders with all of them; computation (dask, numba, BLAS)
+# leaves two for rendering and stream encoding.
+<%- cores = [context.num_cores.to_i, 1].max -%>
+render_threads=<%= cores %>
+compute_threads=<%= [cores - 2, 1].max %>
+
+apptainer_args=(exec --cleanenv --bind "${BIND_PATHS}" --bind "${session_dir}")
+
+# Open the store at start-up if it exists; otherwise start an empty viewer
+# rather than ending the session straight away.
+if [ -n "${dataset}" ]; then
+  if [ -d "${dataset}" ]; then
+    # Bind the store's directory when it lies outside the paths bound above.
+    covered=0
+    IFS=',' read -r -a bound <<< "${BIND_PATHS}"
+    for b in "${bound[@]}"; do
+      b="${b%%:*}"
+      case "${dataset}/" in "${b%/}/"*) covered=1 ;; esac
+    done
+    if [ "${covered}" -eq 0 ]; then
+      apptainer_args+=(--bind "$(dirname "${dataset}")")
+    fi
+    export APPTAINERENV_NAPARI_DATASET="${dataset}"
+    echo "$(date) Opening ${dataset}"
+  else
+    echo "$(date) WARNING: ${dataset} is not a directory; starting an empty viewer"
+  fi
+fi
+
+# --cleanenv keeps the host's modules, Python and Qt settings out of the
+# container; APPTAINERENV_* variables are passed in regardless.
+export APPTAINERENV_SELKIES_MASTER_TOKEN="${SELKIES_MASTER_TOKEN}"
+export APPTAINERENV_NAPARI_EXIT_MARKER="${NAPARI_EXIT_MARKER}"
+export APPTAINERENV_SELKIES_WAYLAND="false"
+export APPTAINERENV_TMPDIR="${TMPDIR:-/tmp}"
+export APPTAINERENV_LP_NUM_THREADS="${render_threads}"
+export APPTAINERENV_DASK_NUM_WORKERS="${compute_threads}"
+export APPTAINERENV_NUMBA_NUM_THREADS="${compute_threads}"
+export APPTAINERENV_OMP_NUM_THREADS="${compute_threads}"
+export APPTAINERENV_OPENBLAS_NUM_THREADS="${compute_threads}"
+export APPTAINERENV_MKL_NUM_THREADS="${compute_threads}"
+export APPTAINERENV_NAPARI_APP="${napari_app}"
+
+selkies_args=(
+  --session=/opt/napari-selkies/bin/napari-session
+  --public
+  --port="${port}"
+  --enable-basic-auth=false
+  --enable-https=false
+  --allowed-origins='*'
+  --use-cpu=true
+  # Files uploaded from the browser's side panel land in the session directory
+  # (Selkies would otherwise create ~/Desktop in the user's home for them).
+  --file-manager-path="${session_dir}/transfers"
+)
+
+echo "$(date) Starting image <%= context.napari_spatialdata_version %> (viewer: ${napari_app}) from ${NAPARI_SIF}"
+echo "$(date) Rendering threads: ${render_threads}; compute threads: ${compute_threads}"
+
+apptainer "${apptainer_args[@]}" "${NAPARI_SIF}" selkies-session "${selkies_args[@]}" &
+session_pid=$!
+
+# End the session when napari exits (File > Exit, or closing its main window).
+while kill -0 "${session_pid}" 2>/dev/null; do
+  if [ -e "${NAPARI_EXIT_MARKER}" ]; then
+    echo "$(date) napari has exited; stopping the session"
+    kill -TERM "${session_pid}" 2>/dev/null
+    break
+  fi
+  sleep 2
+done
+
+wait "${session_pid}"

@@ -1,0 +1,10 @@
+---
+name: napari-spatialdata
+category: Interactive Apps
+subcategory: Imaging
+role: batch_connect
+description: |
+  napari with the napari-spatialdata plugin, for interactive exploration and
+  annotation of spatial omics data (Xenium, CosMx and other SpatialData
+  stores), running on a compute node and streamed to the browser as a single
+  application window.
