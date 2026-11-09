@@ -74,6 +74,13 @@ From: ubuntu:24.04
     /tmp/uv-bootstrap/bin/pip install --quiet uv
     uv=/tmp/uv-bootstrap/bin/uv
 
+    # Allow slow build filesystems: uv's default limit of 60 seconds per file
+    # for bytecode compilation can be exceeded, which fails the build.
+    export UV_COMPILE_BYTECODE_TIMEOUT=900
+    # The cache and the image are on different filesystems; copy without warning.
+    export UV_LINK_MODE=copy
+
+
     # Main environment. PyTorch (for Cellpose) comes first, as the CPU-only
     # build from PyTorch's index; the lock file deliberately omits torch and
     # the CUDA libraries that PyPI's build would bring.
@@ -157,6 +164,10 @@ From: ubuntu:24.04
 
 %test
     set -e
+    # napari writes its theme cache and settings under the home directory on
+    # import; give the test a temporary one, as /root is read-only here.
+    test_home=$(mktemp -d)
+    export HOME="${test_home}" XDG_CACHE_HOME="${test_home}/.cache" XDG_CONFIG_HOME="${test_home}/.config"
     command -v selkies-session >/dev/null
     command -v Xvfb >/dev/null
     command -v openbox >/dev/null
