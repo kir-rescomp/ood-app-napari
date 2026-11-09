@@ -1,0 +1,18 @@
+--- a/napari_spatialdata/utils/_viewer_utils.py
++++ b/napari_spatialdata/utils/_viewer_utils.py
+@@ -18,7 +18,14 @@
+     add_z = include_z and "z" in axes
+ 
+     for i in range(len(df)):
+-        indices.append(int(df.index[i]))
++        # Integer-like ids are converted to int as before; other ids (for
++        # example Xenium v2+ cell_id strings from spatialdata-io) are kept.
++        index = df.index[i]
++        try:
++            index = int(index)
++        except (TypeError, ValueError):
++            pass
++        indices.append(index)
+ 
+         if simplify:
+             xy = list(df.geometry.iloc[i].exterior.simplify(tolerance=2).coords)

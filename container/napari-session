@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# napari-session: the "desktop" that selkies-session starts on its Xvfb display.
+#
+# Runs a minimal window manager and napari with the napari-spatialdata plugin
+# as the only application, and keeps the napari windows fitted to the display:
+#   - the main napari window is undecorated (Openbox rule in rc.xml) and
+#     maximised, and is maximised again if it ever loses that state, so that it
+#     follows the browser window as Selkies resizes the display (down to about
+#     680 pixels high, the minimum set by napari's docked widgets);
+#   - any other window left partly outside the display after a resize (a
+#     dialog placed while the display was larger, for example) is re-centred.
+#
+# Environment (set by the Open OnDemand job script):
+#   NAPARI_APP          "spatialdata" (default): napari 0.10 with
+#                       napari-spatialdata and the other plugins;
+#                       "cosmx": napari 0.6.6 with Bruker's napari-cosmx
+#   NAPARI_DATASET      optional data to open at start-up (a SpatialData
+#                       .zarr store, or a napari-cosmx data folder)
+#   NAPARI_EXIT_MARKER  file created when napari exits, so that the job ends
+#
+# Rendering is OpenGL through Mesa's llvmpipe software renderer, which needs
+# no GPU. LP_NUM_THREADS (set by the job) sets the number of rendering threads.
+
+set -u
+
+NAPARI_ENV="${NAPARI_ENV:-/opt/napari-env}"
+OPENBOX_RC="${OPENBOX_RC:-/opt/napari-selkies/openbox/rc.xml}"
+# Display size until a browser connects and Selkies sizes it to the client.
+INITIAL_SIZE="${NAPARI_INITIAL_SIZE:-1920x1080}"
+
+# Qt on the X display, with software OpenGL.
+export QT_QPA_PLATFORM=xcb
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+# A fixed scale: the stream is sized in device pixels by the browser.
+export QT_AUTO_SCREEN_SCALE_FACTOR=0
+export QT_ENABLE_HIGHDPI_SCALING=0
+
+# Read .zarr folders with napari-spatialdata rather than asking each time
+# (napari's built-in reader also accepts them). napari matches folders with a
+# trailing slash, hence the second pattern.
+export NAPARI_PLUGINS_EXTENSION2READER='{"*.zarr": "napari-spatialdata", "*.zarr/": "napari-spatialdata"}'
+
+# Writable caches. The image is read-only, and numba and matplotlib otherwise
+# try to write next to their installed files or into a shared home directory.
+cache_root="${TMPDIR:-/tmp}/napari-session-$(id -u)"
+mkdir -p "${cache_root}/numba" "${cache_root}/mpl" "${cache_root}/runtime"
+chmod 700 "${cache_root}/runtime"
+export NUMBA_CACHE_DIR="${cache_root}/numba"
+export MPLCONFIGDIR="${cache_root}/mpl"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-${cache_root}/runtime}"
+
+# Cellpose model weights included in the image. Compute nodes cannot download
+# them, so each is linked into ~/.cellpose/models (Cellpose's default model
+# folder) unless the user already has a file of that name there. Models the
+# user downloads or trains elsewhere remain usable.
+bundled_models="${CELLPOSE_BUNDLED_MODELS:-/opt/cellpose-models}"
+if [ -d "${bundled_models}" ]; then
+    user_models="${HOME}/.cellpose/models"
+    mkdir -p "${user_models}" 2>/dev/null || true
+    for model in "${bundled_models}"/*; do
+        name=$(basename "${model}")
+        [ "${name}" = SHA256SUMS ] && continue
+        if [ ! -e "${user_models}/${name}" ]; then
+            # A link left by an earlier session that no longer resolves (it
+            # points into the image) is replaced.
+            rm -f "${user_models}/${name}" 2>/dev/null || true
+            ln -s "${model}" "${user_models}/${name}" 2>/dev/null || true
+        fi
+    done
+fi
+
+openbox --config-file "${OPENBOX_RC}" &
+wm_pid=$!
+
+# Let the window manager take ownership of the display first, so that every
+# napari window is managed by it.
+for _ in $(seq 1 20); do
+    wmctrl -m >/dev/null 2>&1 && break
+    sleep 0.25
+done
+
+# selkies-session starts Xvfb at its maximum size; start napari on a display
+# of ordinary size so that its first windows are placed sensibly.
+selkies-resize "${INITIAL_SIZE}" >/dev/null 2>&1 || true
+
+dataset_args=()
+if [ -n "${NAPARI_DATASET:-}" ]; then
+    echo "napari-session: opening ${NAPARI_DATASET}"
+    dataset_args=("${NAPARI_DATASET}")
+fi
+
+case "${NAPARI_APP:-spatialdata}" in
+    cosmx)
+        # napari 0.6.6 with napari-cosmx, in its own environment. Its reader
+        # accepts any folder, so a data folder given here is opened with it.
+        cosmx_env="${NAPARI_COSMX_ENV:-/opt/napari-cosmx-env}"
+        # A separate settings file: napari 0.6.6 and 0.10 would otherwise
+        # share ~/.config/napari/settings.yaml, written in different schema
+        # versions. The .zarr reader preference names a plugin that is not in
+        # this environment.
+        export NAPARI_CONFIG="${HOME}/.config/napari-cosmx/settings.yaml"
+        unset NAPARI_PLUGINS_EXTENSION2READER
+        echo "napari-session: napari-cosmx (Bruker Software License Agreement for Non-Commercial Use, ${cosmx_env}/LICENSE-napari-cosmx.txt)"
+        if [ ${#dataset_args[@]} -gt 0 ]; then
+            "${cosmx_env}/bin/napari" --plugin napari-CosMx "${dataset_args[@]}" &
+        else
+            "${cosmx_env}/bin/napari" &
+        fi
+        ;;
+    *)
+        # napari-spatialdata-start opens the store (or an empty viewer, from
+        # which a store is opened with File > Open Folder...) and arranges the
+        # plugin's widgets so that the window fits a laptop-height browser
+        # window.
+        "${NAPARI_START:-/opt/napari-selkies/bin/napari-spatialdata-start}" "${dataset_args[@]}" &
+        ;;
+esac
+napari_pid=$!
+
+# The main napari window: a "normal" window whose title begins with "napari"
+# and which is not transient for another window (dialogs are).
+main_window() {
+    local wid
+    for wid in $(wmctrl -l 2>/dev/null | awk '{t=$0; sub(/^[^ ]+ +[^ ]+ +[^ ]+ +/, "", t); if (t ~ /^napari/) print $1}'); do
+        if xprop -id "${wid}" WM_TRANSIENT_FOR 2>/dev/null | grep -q 'not found'; then
+            echo "${wid}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+keep_windows_fitted() {
+    local main state geometry width height wid x y w h
+    while kill -0 "${napari_pid}" 2>/dev/null; do
+        geometry=$(xwininfo -root 2>/dev/null | awk '/-geometry/ {print $2}')
+        geometry="${geometry%%+*}"
+        width="${geometry%x*}"
+        height="${geometry#*x}"
+
+        if main=$(main_window); then
+            state=$(xprop -id "${main}" _NET_WM_STATE 2>/dev/null)
+            if [[ "${state}" != *FULLSCREEN* ]] && \
+               [[ "${state}" != *MAXIMIZED_VERT* || "${state}" != *MAXIMIZED_HORZ* ]]; then
+                wmctrl -i -r "${main}" -b add,maximized_vert,maximized_horz
+            fi
+
+            if [[ -n "${width}" && -n "${height}" ]]; then
+                while read -r wid x y w h; do
+                    [[ "${wid}" == "${main}" ]] && continue
+                    if (( x < 0 || y < 0 || x + w > width || y + h > height )); then
+                        x=$(( (width - w) / 2 )); (( x < 0 )) && x=0
+                        y=$(( (height - h) / 2 )); (( y < 0 )) && y=0
+                        wmctrl -i -r "${wid}" -e "0,${x},${y},-1,-1"
+                    fi
+                done < <(wmctrl -lG 2>/dev/null | awk '{print $1, $3, $4, $5, $6}')
+            fi
+        fi
+        sleep 1
+    done
+}
+keep_windows_fitted &
+fitter_pid=$!
+
+wait "${napari_pid}"
+status=$?
+echo "napari-session: napari exited with status ${status}"
+
+if [ -n "${NAPARI_EXIT_MARKER:-}" ]; then
+    touch "${NAPARI_EXIT_MARKER}" 2>/dev/null || true
+fi
+
+kill "${fitter_pid}" "${wm_pid}" 2>/dev/null || true
+exit "${status}"

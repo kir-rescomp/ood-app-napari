@@ -1,0 +1,42 @@
+# Top-level packages for the napari-spatialdata image.
+#
+# After changing this file, regenerate the pinned files with
+#   ./compile-lock.sh
+# which writes requirements.lock and requirements-torch.txt.
+#
+# napari-spatialdata's own "[all]" extra asks for napari[pyqt5], which napari
+# 0.10 no longer provides, so it would install no Qt binding at all. The Qt
+# binding (PyQt6) therefore comes from napari[all] here.
+napari[all]==0.10.0
+napari-spatialdata[bermuda]==0.7.2
+
+# Plugins requested by KIR users (November 2026). Versions are pinned by the
+# lock file; the newest release of each resolves with napari 0.10.
+napari-animation
+napari-cellposesam        # Cellpose-SAM segmentation; PyTorch, CPU-only build
+napari-czi
+napari-czitools>=0.13     # lower bound: without it the resolver can fall back to 0.0.11
+napari-geojson
+napari-harpy
+napari-image-stacker
+napari-imc
+napari-matplotlib
+napari-metadata
+napari-ome-zarr
+napari-pystackreg
+napari-svg
+napari-tiff>=0.1.6        # lower bound, as for napari-czitools
+elastix-napari
+
+# napari-prism: the latest release (0.1.7) pins dask<2024.11.12, which
+# conflicts with napari-spatialdata 0.7.2 (dask>=2025.2). The main branch has
+# removed that pin but is not yet released, so it is installed from a fixed
+# commit (16 December 2025). Replace with a release once one is published.
+napari-prism @ git+https://github.com/clinicalomx/napari-prism.git@84a9ad5cedd2b871ee1abcd1aaf82bef5a3ace3a
+# napari-prism needs squidpy; squidpy 1.6 fails to import with anndata 0.13,
+# and 1.8 needs the imagecodecs override in overrides.txt.
+squidpy>=1.8
+
+# napari-cosmx is not in this environment: it needs numpy<2, zarr<3 and
+# distributed<2024.9, and supports napari up to 0.6.6. It has its own
+# environment in the image (requirements-cosmx.in).

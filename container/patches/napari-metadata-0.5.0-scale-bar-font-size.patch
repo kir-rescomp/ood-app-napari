@@ -1,0 +1,14 @@
+--- a/napari_metadata/viewer_widgets/_scale_bar.py	2026-11-09 12:02:03.436592797 +0000
++++ b/napari_metadata/viewer_widgets/_scale_bar.py	2026-11-09 12:02:03.469236115 +0000
+@@ -117,7 +117,10 @@
+ 
+     def _update_display(self) -> None:
+         with QSignalBlocker(self._font_size_spinbox):
+-            self._font_size_spinbox.setValue(self.scale_bar.font_size)
++            # napari 0.10 leaves font_size as None (automatic size); show the
++            # widget default of 10 in that case instead of failing.
++            font_size = self.scale_bar.font_size
++            self._font_size_spinbox.setValue(10 if font_size is None else font_size)
+ 
+     def _get_display_text(self) -> str:
+         return str(self._font_size_spinbox.value())

@@ -1,0 +1,11 @@
+# Version overrides applied by compile-lock.sh (uv pip compile --override).
+# Each one replaces every package's requirement on that dependency, so keep
+# this list short and give the reason for each entry.
+
+# squidpy 1.8 (needed by napari-prism; squidpy 1.6 fails to import with
+# anndata 0.13) caps imagecodecs<2026. The cap was added in October 2025 with
+# its H&E specimen-detection feature, before any 2026 release existed, and is
+# still on squidpy's main branch. The current czitools stack (napari-czitools
+# 0.13 -> czitools -> czifile) needs imagecodecs>=2026.6.6. Remove this entry
+# once squidpy relaxes the cap.
+imagecodecs>=2026.6.6

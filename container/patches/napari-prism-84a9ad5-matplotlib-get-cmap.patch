@@ -1,0 +1,13 @@
+--- a/napari_prism/pl.py	2026-11-09 12:02:03.297121021 +0000
++++ b/napari_prism/pl.py	2026-11-09 12:02:03.325606440 +0000
+@@ -12,7 +12,9 @@
+ import skimage
+ import xarray as xr
+ from anndata import AnnData
+-from matplotlib.cm import get_cmap
++# matplotlib.cm.get_cmap was removed in matplotlib 3.9; pyplot.get_cmap has
++# the same signature.
++from matplotlib.pyplot import get_cmap
+ from spatialdata import SpatialData
+ from spatialdata.transformations import (
+     get_transformation_between_coordinate_systems,
