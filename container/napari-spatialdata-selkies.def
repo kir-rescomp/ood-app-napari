@@ -145,6 +145,10 @@ From: ubuntu:24.04
     # None of the image's Python environments may import packages from the
     # user's ~/.local, which is bind-mounted from the host.
     export PYTHONNOUSERSITE=1
+    # The image is read-only. Therefore, numba ( used by naapri ) and matplotlib need
+    # writable cache locations outside it
+    export NUMBA_CACHE_DIR="${TMPDIR:-/tmp}/numba-cache-$(id -u)"
+    export MPLCONFIGDIR="${TMPDIR:-/tmp}/matplotlib-$(id -u)"
 
 %runscript
     # Default: a napari-spatialdata session streamed by Selkies; any arguments
