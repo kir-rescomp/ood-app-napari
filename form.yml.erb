@@ -44,7 +44,7 @@ attributes:
         max-hours: <%= limits.to_json.to_json %>
 
   bc_num_hours:
-    value: 4
+    value: 1
     min: 1
     help: |
       The session ends when this time is reached, or earlier when napari is
@@ -53,7 +53,7 @@ attributes:
   num_cores:
     widget: number_field
     label: CPU cores
-    value: 8
+    value: 4
     min: 4
     max: 32
     step: 1
@@ -67,10 +67,10 @@ attributes:
   memory_gb:
     widget: number_field
     label: Memory (GB)
-    value: 32
+    value: 8
     min: 8
     max: 256
-    step: 4
+    step: 2
     help: |
       SpatialData reads image pyramids lazily, but points (transcripts),
       shapes (cell boundaries) and the table are held in memory once shown.
@@ -115,4 +115,3 @@ form:
   - napari_app
   - dataset
   - napari_spatialdata_version
-  - bc_email_on_started
