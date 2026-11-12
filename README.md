@@ -27,3 +27,14 @@ proxy without additional ports or services.
 5. When napari exits, the launcher writes `napari.exited` in the session
    directory; `script.sh` stops the container and the job ends.
 
+## Python environments
+
+The image has two Python 3.12 environments. The main one holds napari 0.10,
+napari-spatialdata and all requested plugins but one; napari-cosmx has its
+own environment (see below). The form's *Viewer* field selects which one a
+session starts.
+
+All versions are pinned by `compile-lock.sh`, which compiles
+`requirements.in` and `requirements-cosmx.in` with uv. To add or update a
+plugin, edit the `.in` file, run `./compile-lock.sh`, and rebuild the image
+under a new version.
