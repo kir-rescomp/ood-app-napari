@@ -1,1 +1,1 @@
-# ood-app-napari
+# Napari-SpatialData on Open OnDemand (Selkies streaming)
