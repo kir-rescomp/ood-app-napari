@@ -3,7 +3,7 @@
 An Open OnDemand Batch Connect app that runs napari with the
 [napari-spatialdata](https://github.com/scverse/napari-spatialdata) plugin in
 an Apptainer container, and streams it to the browser as a
-single application window. It follows the same design as the [QuPath app](https://github.com/kir-rescomp/ood-app-qupath
+single application window. It follows the same design as the [QuPath app](https://github.com/kir-rescomp/ood-app-qupath)
 : the stream is produced by [Selkies](https://github.com/selkies-project/selkies)
 (H.264 over a WebSocket) and passes through the portal's `/rnode` reverse
 proxy without additional ports or services.
